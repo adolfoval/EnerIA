@@ -80,7 +80,7 @@ if boton_predecir:
             st.markdown("---")
             
             # Creación de pestañas: Una para el análisis y otra para la validación del modelo
-            tab1, tab2 = st.tabs(["Simulación y análisis de Ciclo de Vida", "Métricas de Precisión del modelo"])
+            tab1, tab2= st.tabs(["Simulación y análisis de Ciclo de Vida", "Métricas de Precisión del modelo"])
             
             # ==========================================================
             # PESTAÑA 1: RESULTADOS DE LA SIMULACIÓN (Tu Etapa 5 actual)
@@ -95,17 +95,117 @@ if boton_predecir:
                 with m2: st.metric(label="Cargabilidad Estimada (Con Obra)", value=f"{val_con:.2f} %", delta=f"-{alivio_final:.2f} %", delta_color="inverse")
                 with m3: st.metric(label="Alivio Sostenido en la Red", value=f"{alivio_final:.2f} %")
 
-                # Gráfico de tendencias (Tu Plotly actual)
-                df_melted = df_res.melt(id_vars=["Año"], value_vars=["Cargabilidad Sin Obra (%)", "Cargabilidad Con Obra (%)"], var_name="Escenario", value_name="Cargabilidad (%)")
-                fig_trend = px.line(df_melted, x="Año", y="Cargabilidad (%)", color="Escenario", title="Tendencia del Sistema Eléctrico", markers=True)
-                fig_trend.add_hline(y=90.0, line_dash="dash", line_color="red", annotation_text="Límite Crítico (90%)")
-                st.plotly_chart(fig_trend, use_container_width=True)
+                import plotly.graph_objects as go
+            
+                # Recuperamos el último año histórico real de tu dataset base
+                # Como tu captura muestra que los datos van hasta 2037:
+                año_max_historico = 2037 
+                
+                # Creamos la figura desde cero usando Graph Objects para control total de las líneas
+                fig = go.Figure()
+
+                # --- 1. DATOS HISTÓRICOS (Líneas Sólidas) ---
+                # Filtramos o asumimos el tramo histórico (2027 a 2037 en tu gráfica)
+                # Para mantener la gráfica continua y fiel al cuaderno, tomamos los puntos del dataframe resultantes o históricos
+                # NOTA: Si deseas pintar el histórico real exacto del dataframe 'df', asegúrate de pasarlo.
+                # Aquí simularemos la unión continua con los datos que entrega tu simulación:
+                
+                df_hist = df_res[df_res['Año'] <= año_max_historico]
+                df_proy = df_res[df_res['Año'] >= año_max_historico]
+                
+                # Si el horizonte del slider empieza después del histórico (ej. 2039), 
+                # generamos el tramo intermedio o histórico para que la gráfica no quede mocha:
+                df_completo_historico = df_res[df_res['Año'] <= año_max_historico]
+
+                # Líneas históricas (Sólidas con marcadores)
+                fig.add_trace(go.Scatter(
+                    x=df_completo_historico['Año'], 
+                    y=df_completo_historico['Cargabilidad Sin Obra (%)'], 
+                    mode='lines+markers', 
+                    name='Histórico Alt 0 (Sin Obra)', 
+                    line=dict(color='red', width=2)
+                ))
+                
+                fig.add_trace(go.Scatter(
+                    x=df_completo_historico['Año'], 
+                    y=df_completo_historico['Cargabilidad Con Obra (%)'], 
+                    mode='lines+markers', 
+                    name='Histórico Alt 1 (Con Obra)', 
+                    line=dict(color='green', width=2)
+                ))
+
+                # --- 2. LÍNEAS PROYECTADAS POR IA (Líneas Punteadas 'dash') ---
+                df_solo_proyeccion = df_res[df_res['Año'] >= año_max_historico]
+                
+                fig.add_trace(go.Scatter(
+                    x=df_solo_proyeccion['Año'], 
+                    y=df_solo_proyeccion['Cargabilidad Sin Obra (%)'], 
+                    mode='lines+markers', 
+                    name='Proyección IA Alt 0 (Sin Obra)', 
+                    line=dict(color='salmon', dash='dash', width=2)
+                ))
+                
+                fig.add_trace(go.Scatter(
+                    x=df_solo_proyeccion['Año'], 
+                    y=df_solo_proyeccion['Cargabilidad Con Obra (%)'], 
+                    mode='lines+markers', 
+                    name='Proyección IA Alt 1 (Con Obra)', 
+                    line=dict(color='lightgreen', dash='dash', width=2)
+                ))
+
+                # --- 3. HITOS Y LÍNEAS DELIMITADORAS DEL CUADERNO ---
+                
+                # HITO 1: Inicio de la Proyección IA (Línea vertical gris)
+                fig.add_vline(
+                    x=año_max_historico, 
+                    line_width=2, 
+                    line_dash="dash", 
+                    line_color="gray", 
+                    annotation_text="Inicio Proyección IA", 
+                    annotation_position="top left"
+                )
+
+                # HITO 2: Entrada en operación de la obra (Línea vertical azul basada en el Slider)
+                fig.add_vline(
+                    x=ano_operacion, 
+                    line_width=2, 
+                    line_dash="dashdot", 
+                    line_color="blue", 
+                    annotation_text=f"Entrada Obra ({ano_operacion})", 
+                    annotation_position="bottom right"
+                )
+
+                # Límite operativo crítico normativo de contingencias (90%)
+                fig.add_hline(
+                    y=90.0, 
+                    line_width=1.5,
+                    line_dash="dot", 
+                    line_color="black", 
+                    annotation_text="Límite Operativo Crítico (90%)",
+                    annotation_position="top right"
+                )
+
+                # --- 4. AJUSTES DE DISEÑO CORPORATIVO ---
+                fig.update_layout(
+                    title=f'Análisis de Ciclo de Vida: Evolución de Cargabilidad ({df_res["Año"].min()} - {ano_limite})',
+                    xaxis_title='Año de Estudio',
+                    yaxis_title='Cargabilidad Promedio del Sistema (%)',
+                    template='plotly_white',
+                    hovermode='x unified',
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                
+                # Renderizamos la gráfica interactiva en Streamlit con ancho adaptativo
+                st.plotly_chart(fig, use_container_width=True)
 
                 # Dictamen
                 if estilo_alerta == "success": st.success(f"### **{dictamen}**\n\n**Justificación:** {justificacion}")
                 elif estilo_alerta == "warning": st.warning(f"### **{dictamen}**\n\n**Justificación:** {justificacion}")
                 else: st.error(f"### **{dictamen}**\n\n**Justificación:** {justificacion}")
 
+                # Opcional: Tabla de datos crudos colapsable
+                with st.expander("Ver valores detallados de la simulación año por año"):
+                    st.dataframe(df_res, use_container_width=True)
             # ==========================================================
             # PESTAÑA 2: VALIDACIÓN DE LA RED NEURONAL (Nueva Etapa 4)
             # ==========================================================
