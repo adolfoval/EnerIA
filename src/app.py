@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.express as px
-from core import load_data, transform_data, logo_path, load_model_columns, load_ml_model, ejecutar_simulacion_horizonte
+from core import load_data, transform_data, logo_path, ejecutar_simulacion_horizonte
  
 #----------------------------------------------------------------------------------------
 # Interfaz
@@ -21,9 +21,9 @@ st.write("Datos procesados, limpios y transformados.")
 data_ann = transform_data(data)
 st.write(data_ann.head(5))
 
-columns = load_model_columns()
-if not columns:
-    st.toast(f"No se encontró el archivo de columnas", icon="🚨")
+# columns = load_model_columns()
+# if not columns:
+#     st.toast(f"No se encontró el archivo de columnas", icon="🚨")
 
 st.markdown("### 📊 Simulación y Análisis de Ciclo de Vida del Proyecto (ETAPA 5)")
 
@@ -54,26 +54,25 @@ st.info(f"⏳ **Periodo bajo análisis:** Evaluación del sistema eléctrico des
 st.markdown("---")
 
 try:
-    # Llamamos a la lógica extraída del cuaderno
+    # Llamamos a la lógica corregida y emparejada
     df_res, dictamen, justificacion, estilo_alerta, alivio_final = ejecutar_simulacion_horizonte(ano_operacion, vida_util)
     
-    # 1. Bloque de Métricas Resumen
+    # 1. Bloque de Métricas Resumen (Estilo corporativo original)
     st.subheader(f"📈 Comportamiento Proyectado al Final de la Vida Útil ({ano_limite})")
     val_sin = df_res.iloc[-1]["Cargabilidad Sin Obra (%)"]
     val_con = df_res.iloc[-1]["Cargabilidad Con Obra (%)"]
     
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.metric(label="Cargabilidad Estimada (Sin Obra)", value=f"{val_sin} %")
+        st.metric(label="Cargabilidad Estimada (Sin Obra)", value=f"{val_sin:.2f} %")
     with m2:
-        st.metric(label="Cargabilidad Estimada (Con Obra)", value=f"{val_con} %", delta=f"-{alivio_final} %", delta_color="inverse")
+        st.metric(label="Cargabilidad Estimada (Con Obra)", value=f"{val_con:.2f} %", delta=f"-{alivio_final:.2f} %", delta_color="inverse")
     with m3:
-        st.metric(label="Alivio Sostenido en la Red", value=f"{alivio_final} %")
+        st.metric(label="Alivio Sostenido en la Red", value=f"{alivio_final:.2f} %")
 
     # 2. Gráfico Interactivo de Curva de Carga (Plotly)
     st.subheader("📉 Evolución de la Cargabilidad en el Tiempo")
     
-    # Modificamos la estructura del DataFrame para que Plotly pinte ambas líneas de forma limpia
     df_melted = df_res.melt(
         id_vars=["Año"], 
         value_vars=["Cargabilidad Sin Obra (%)", "Cargabilidad Con Obra (%)"],
@@ -87,23 +86,17 @@ try:
         markers=True,
         color_discrete_map={"Cargabilidad Sin Obra (%)": "#EF553B", "Cargabilidad Con Obra (%)": "#636EFA"}
     )
-    
-    # Añadir de forma visual la línea del límite crítico del 90% planteada en tu Colab
     fig.add_hline(y=90.0, line_dash="dash", line_color="red", annotation_text="Límite Crítico Operativo (90%)", annotation_position="top left")
-    
     st.plotly_chart(fig, use_container_width=True)
 
     # 3. Cuadro de Dictamen Técnico Automatizado
     st.subheader("📋 Dictamen Técnico de Viabilidad")
     if estilo_alerta == "success":
         st.success(f"### **✅ {dictamen}**\n\n**Justificación:** {justificacion}")
-    else:
+    elif estilo_alerta == "warning":
         st.warning(f"### **⚠️ {dictamen}**\n\n**Justificación:** {justificacion}")
-
-    # Opcional: Tabla de datos crudos colapsable
-    with st.expander("🔍 Ver valores detallados de la simulación año por año"):
-        st.dataframe(df_res, use_container_width=True)
+    else:
+        st.error(f"### **❌ {dictamen}**\n\n**Justificación:** {justificacion}")
 
 except Exception as e:
     st.error(f"Error al procesar la simulación de la ETAPA 5: {e}")
-    st.info("Valida que los archivos `.pkl` del modelo y columnas estén ubicados correctamente en `src/models/`.")
