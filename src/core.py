@@ -8,9 +8,10 @@ import joblib
 current_path = os.path.dirname(os.path.abspath(__file__))
 logo_path = os.path.join(current_path, "assets", "logo.jpg")
 data_path = os.path.join(current_path, "datasets", "Base_de_datos.xlsx")
-model_path = os.path.join(current_path, "models", "modelo_eneria_original.keras")
-columns_path = os.path.join(current_path, "models", "columnas_entrenamiento.pkl")
-scaler_path = os.path.join(current_path, "models", "scaler_original.pkl")
+# model_path = os.path.join(current_path, "models", "modelo_eneria_original.keras")
+model_path = os.path.join(current_path, "models", "modelo_original_pipeline_eneria.keras")
+# columns_path = os.path.join(current_path, "models", "columnas_entrenamiento.pkl")
+# scaler_path = os.path.join(current_path, "models", "scaler_original.pkl")
 x_base_path = os.path.join(current_path, "models", "X_original.pkl")
 
 @st.cache_data(persist="disk")
@@ -53,32 +54,27 @@ def _load_ann_model():
  
     raise FileNotFoundError("No se encontró el archivo del modelo.")
 
-@st.cache_resource
-def _load_model_columns():
-    if os.path.exists(columns_path):
-        return list(joblib.load(columns_path))
-    return []
+# @st.cache_resource
+# def _load_model_columns():
+#     if os.path.exists(columns_path):
+#         return list(joblib.load(columns_path))
+#     return []
 
 @st.cache_resource
 def _load_ann_components():
-    """Carga de forma segura la matriz base y el escalador del entrenamiento"""
-    scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
+    """Carga de forma segura la matriz base"""
+    # scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
     X_base = joblib.load(x_base_path) if os.path.exists(x_base_path) else None
-    return scaler, X_base
+    return  X_base
 
 def ejecutar_simulacion_horizonte(ano_operacion, vida_util):
     """
-    Simulación pura basada en el pipeline del Colab. 
-    Aplica el escalado en bloque y extrae la media aritmética real.
+    Simulación optimizada con Pipeline de Keras unificado.
+    Forza la conversión de datos a float32 para evitar el error de dtypes.
     """
     model = _load_ann_model()
-    scaler, X_base = _load_ann_components()
+    X_base = _load_ann_components()
     
-    # Si falta algún componente crítico, creamos un fallback estructural limpio
-    if X_base is None or scaler is None:
-        raise FileNotFoundError("Por favor, asegúrate de colocar 'X_base.pkl' y 'scaler.pkl' en src/models/")
-    
-    # El horizonte simula año por año hasta el fin de la vida útil
     anos_horizonte = list(range(ano_operacion, ano_operacion + vida_util + 1))
     resultados = []
     
@@ -88,16 +84,18 @@ def ejecutar_simulacion_horizonte(ano_operacion, vida_util):
         df_sim_alt0['Año'] = float(anyo)
         df_sim_alt0['Alternativa'] = 0.0
         
-        X_sim_alt0_scaled = scaler.transform(df_sim_alt0)
-        pred_alt0 = model.predict(X_sim_alt0_scaled, verbose=0).mean()
+        # SOLUCIÓN CRÍTICA: Convertimos todo el bloque a float32 antes de pasarlo a Keras
+        X_input_alt0 = df_sim_alt0.astype(np.float32).values
+        pred_alt0 = model.predict(X_input_alt0, verbose=0).mean()
         
         # --- ALTERNATIVA 1 (Con Obra) ---
         df_sim_alt1 = X_base.copy()
         df_sim_alt1['Año'] = float(anyo)
         df_sim_alt1['Alternativa'] = 1.0
         
-        X_sim_alt1_scaled = scaler.transform(df_sim_alt1)
-        pred_alt1 = model.predict(X_sim_alt1_scaled, verbose=0).mean()
+        # SOLUCIÓN CRÍTICA: Convertimos todo el bloque a float32 antes de pasarlo a Keras
+        X_input_alt1 = df_sim_alt1.astype(np.float32).values
+        pred_alt1 = model.predict(X_input_alt1, verbose=0).mean()
         
         resultados.append({
             "Año": anyo,
@@ -108,13 +106,12 @@ def ejecutar_simulacion_horizonte(ano_operacion, vida_util):
         
     df_resultados = pd.DataFrame(resultados)
     
-    # Extraer el cierre de ciclo útil para las alertas del dictamen
+    # --- COMPLETAMOS LA LÓGICA DE DICTÁMENES PARA EL RETORNO ---
     fila_final = df_resultados.iloc[-1]
     c0_final = fila_final["Cargabilidad Sin Obra (%)"]
     c1_final = fila_final["Cargabilidad Con Obra (%)"]
     alivio_final = fila_final["Alivio Sostenido (%)"]
     
-    # Lógica de Dictamen Técnico Automatizado UPME basada en tu cuaderno
     if alivio_final > 1.0:
         if c1_final < 90 and c0_final >= 90:
             dictamen = "EXPANSIÓN TÉCNICAMENTE VIABLE Y ROBUSTA"
@@ -134,3 +131,11 @@ def ejecutar_simulacion_horizonte(ano_operacion, vida_util):
         estilo_alerta = "error"
         
     return df_resultados, dictamen, justificacion, estilo_alerta, alivio_final
+
+@st.cache_resource
+def load_validation_data():
+    """Carga los datos históricos de validación y métricas guardados desde Colab"""
+    valid_path = os.path.join(current_path, "models", "datos_validacion.pkl")
+    if os.path.exists(valid_path):
+        return joblib.load(valid_path)
+    return None
