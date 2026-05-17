@@ -1,0 +1,17 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+
+# Ignorar las carpetas internas del entorno virtual
+Include/*
+Scripts/*
+share/*
+bin/*
+Lib/*
+etc/*
+# ==========================================
+# 2. ARCHIVOS DE DATOS (DATASETS)
+# ==========================================
+
+src/datasets/*.xlsx
+pyvenv.cfg
+__pycache__/
+*.pyc
