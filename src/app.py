@@ -3,8 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-
-from core import load_data, transform_data, logo_path, ejecutar_simulacion_horizonte
+from core import load_data, transform_data, logo_path, ejecutar_simulacion_horizonte, load_shap_data
  
 #----------------------------------------------------------------------------------------
 # Interfaz
@@ -29,12 +28,11 @@ st.write(data_ann.head(5))
 # if not columns:
 #     st.toast(f"No se encontró el archivo de columnas", icon="🚨")
 
-st.markdown("### Simulación y Análisis de Ciclo de Vida del Proyecto (ETAPA 5)")
+st.markdown("### Simulación y Análisis de Ciclo de Vida del Proyecto")
 
 # ==============================================================================
 # FORMULARIO DE ENTRADA DE PARÁMETROS (ETAPA 5)
 # ==============================================================================
-st.subheader("Configuración del Horizonte de Simulación")
 
 # Creamos el contenedor del formulario
 with st.form(key="formulario_simulacion"):
@@ -72,7 +70,7 @@ with st.form(key="formulario_simulacion"):
 # EJECUCIÓN DEL PIPELINE MATEMÁTICO (Solo ocurre al hacer clic)
 # ==============================================================================
 if boton_predecir:
-    with st.spinner("🧠 Red Neuronal procesando flujos de potencia..."):
+    with st.spinner("🧠 La **Red Neuronal** está procesando los flujos de potencia..."):
         try:
             # 1. Ejecutar simulación
             df_res, dictamen, justificacion, estilo_alerta, alivio_final = ejecutar_simulacion_horizonte(ano_operacion, vida_util)
@@ -80,7 +78,7 @@ if boton_predecir:
             st.markdown("---")
             
             # Creación de pestañas: Una para el análisis y otra para la validación del modelo
-            tab1, tab2= st.tabs(["Simulación y análisis de Ciclo de Vida", "Métricas de Precisión del modelo"])
+            tab1, tab2, tab3, tab4= st.tabs(["Simulación y análisis de Ciclo de Vida", "Métricas de Precisión del modelo", "Cuellos de Botella (Heatmaps)", "Explicabilidad de la Red Neuronal (SHAP)"])
             
             # ==========================================================
             # PESTAÑA 1: RESULTADOS DE LA SIMULACIÓN (Tu Etapa 5 actual)
@@ -211,7 +209,7 @@ if boton_predecir:
             # ==========================================================
             with tab2:
                 st.subheader("Validación del Modelo (ANN)")
-                st.markdown("Métricas obtenidas durante la fase de pruebas y validación cruzada del cerebro matemático:")
+                st.markdown("Métricas obtenidas durante la fase de pruebas y validación cruzada del modelo:")
                 
                 # Importamos datos desde el core
                 from core import load_validation_data
@@ -261,6 +259,234 @@ if boton_predecir:
                         st.info("Gráfico de dispersión listo. Esperando matriz de validación.")
                     fig_scatter.update_layout(template="plotly_white", margin=dict(l=20, r=20, t=20, b=20), showlegend=False)
                     st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            with tab3:
+                st.subheader("Mapas de calor comparativos (análisis de cuellos de botella)")
+                st.markdown(
+                    "El siguiente análisis evalúa la cargabilidad individual de cada elemento del sistema "
+                    "a lo largo del horizonte de estudio. Permite identificar la vulnerabilidad local de la infraestructura."
+                )
+                
+                # Invocamos la función del backend pasando tu dataset original de ML o Datos Base (df)
+                # NOTA: Asegúrate de que la variable 'df' (el dataframe con datos históricos/base) esté cargada en app.py
+                from core import generar_datos_heatmaps
+                
+                try:
+                    p_a0, p_a1, vmin, vmax = generar_datos_heatmaps(data)
+                    
+                    # Extraemos los ejes para Plotly
+                    elementos = p_a0.index.tolist()
+                    años = p_a0.columns.tolist()
+                    
+                    # Convertimos las matrices a listas de Python para que Plotly las digiera sin problemas
+                    z_a0 = p_a0.values.tolist()
+                    z_a1 = p_a1.values.tolist()
+                    
+                    # Creamos dos columnas en la interfaz para poner los mapas lado a lado
+                    col_mapa1, col_mapa2 = st.columns(2)
+                    
+                    import plotly.graph_objects as go
+                    
+                    # --- MAPA DE CALOR 1: ALTERNATIVA 0 (Sin Obra) ---
+                    with col_mapa1:
+                        fig_h0 = go.Figure(data=go.Heatmap(
+                            z=z_a0, x=años, y=elementos,
+                            colorscale='YlOrRd',
+                            zmin=vmin, zmax=vmax,
+                            colorbar=dict(title="Cargabilidad (%)", len=0.8),
+                            hovertemplate="<b>Elemento:</b> %{y}<br><b>Año:</b> %{x}<br><b>Cargabilidad:</b> %{z:.1f}%<extra></extra>"
+                        ))
+                        fig_h0.update_layout(
+                            title="Alternativa 0 (Sin Obra) - Riesgo Operativo",
+                            xaxis_title="Año de Operación",
+                            yaxis_title="Elemento del Sistema",
+                            template="plotly_white",
+                            height=550
+                        )
+                        st.plotly_chart(fig_h0, use_container_width=True)
+                        
+                    # --- MAPA DE CALOR 2: ALTERNATIVA 1 (Con Obra) ---
+                    with col_mapa2:
+                        fig_h1 = go.Figure(data=go.Heatmap(
+                            z=z_a1, x=años, y=elementos,
+                            colorscale='YlOrRd',
+                            zmin=vmin, zmax=vmax,
+                            # Ocultamos la barra de color del segundo para no duplicar espacio visual si están simétricos
+                            showscale=False, 
+                            hovertemplate="<b>Elemento:</b> %{y}<br><b>Año:</b> %{x}<br><b>Cargabilidad:</b> %{z:.1f}%<extra></extra>"
+                        ))
+                        # En Streamlit/Plotly no compartimos el eje Y de forma estricta como subplots, 
+                        # pero al ponerlos lado a lado con el mismo rango y tamaño, se alinean perfectamente.
+                        fig_h1.update_layout(
+                            title="Alternativa 1 (Con Obra) - Alivio en la Red",
+                            xaxis_title="Año de Operación",
+                            yaxis_title="", # Dejamos vacío o limpio para evitar redundancia
+                            template="plotly_white",
+                            height=550
+                        )
+                        st.plotly_chart(fig_h1, use_container_width=True)
+                        
+                    # --- CONCLUSIÓN AUTOMÁTICA VISUAL EN FORMATO UI ---
+                    st.markdown("---")
+                    st.markdown("### Análisis comparativo de mapas de calor:")
+                    
+                    st.info(
+                        "* **Transición de Estrés Térmico:** La disipación de los bloques de color rojo/anaranjado hacia tonos amarillos o más claros "
+                        "en el gráfico de la derecha (**Con Obra**) valida geográficamente que la expansión mitiga el riesgo de sobrecarga.\n"
+                        "* **Restricciones Remanentes:** Aquellos elementos específicos que mantengan celdas en tonos oscuros o rojos hacia el final "
+                        "del horizonte en la Alternativa 1 actúan como alertas tempranas. Indican futuros cuellos de botella secundarios que "
+                        "requerirán nuevos esquemas de inversión o análisis complementarios en los próximos planes de expansión."
+                    )
+                    
+                except Exception as e:
+                    st.error(f"Error al generar los Mapas de Calor de la Etapa 6: {e}")
+                    st.info("Asegúrese de que el dataframe 'df' base contenga las columnas 'Elemento', 'Año', 'Cargabilidad (%)_A0' y 'Cargabilidad (%)_A1'.")
+
+            with tab4:
+                st.subheader("Inteligencia Artificial Explicable (XAI) con Valores SHAP")
+                st.markdown(
+                    "Este módulo rompe el paradigma de 'caja negra' de la Red Neuronal, permitiendo auditar "
+                    "cuáles variables técnicas y operativas tienen el mayor peso en las predicciones del sistema."
+                )
+                
+                # Cargamos los datos precalculados del laboratorio de Colab
+                datos_s = load_shap_data()
+                
+                if datos_s is not None:
+                    try:
+                        # 1. EXTRACCIÓN Y REESTRUCTURACIÓN DE MATRICES (Tidy Data)
+                        sv = np.array(datos_s['shap_values'])       # Matriz SHAP [Muestras x Variables]
+                        mv = np.array(datos_s['muestra_prueba'])     # Matriz Original Escalada [Muestras x Variables]
+                        columnas = datos_s['columnas']
+                        
+                        # Calculamos la importancia global media para ordenar de arriba hacia abajo
+                        importancias = np.abs(sv).mean(axis=0)
+                        indices_ordenados = np.argsort(importancias)[::-1][:10] # Top 10 variables
+                        
+                        # Creamos la lista ordenada de variables (la más importante va en el índice superior)
+                        orden_variables_y = [columnas[i] for i in indices_ordenados]
+                        
+                        lista_registros = []
+                        num_muestras = sv.shape[0]
+                        
+                        # Aplanamos la matriz aplicando el efecto Jitter directamente en el dataframe
+                        for idx_muestra in range(num_muestras):
+                            for rango_y, idx_var in enumerate(reversed(indices_ordenados)):
+                                var_nombre = columnas[idx_var]
+                                shap_val = sv[idx_muestra, idx_var]
+                                feat_val = mv[idx_muestra, idx_var] # Escala de color
+                                
+                                # Aplicamos dispersión vertical aleatoria (Jitter) estrictamente confinada al carril
+                                # El carril va desde (rango_y - 0.2) hasta (rango_y + 0.2)
+                                jitter_y = rango_y + np.random.uniform(-0.18, 0.18)
+                                
+                                lista_registros.append({
+                                    'Muestra N°': idx_muestra,
+                                    'Variable Técnica': var_nombre,
+                                    'Impacto (SHAP Value)': shap_val,
+                                    'Valor de la Variable (Color)': feat_val,
+                                    'Y_Con_Jitter': jitter_y,
+                                    'Carril_Base': rango_y
+                                })
+                        
+                        df_shap_plot = pd.DataFrame(lista_registros)
+
+                        # 2. CONSTRUCCIÓN PURA CON GRAPH OBJECTS (Control Absoluto del Renderizado)
+                        fig_shap_live = go.Figure()
+                        
+                        # Añadimos la nube de puntos interactiva usando Scatter clásico (admite colorscale de forma nativa)
+                        fig_shap_live.add_trace(go.Scatter(
+                            x=df_shap_plot['Impacto (SHAP Value)'],
+                            y=df_shap_plot['Y_Con_Jitter'],
+                            mode='markers',
+                            marker=dict(
+                                size=8,
+                                color=df_shap_plot['Valor de la Variable (Color)'],
+                                # Escala térmica Azul (Bajo) -> Púrpura (Medio) -> Rojo (Alto) idéntica al cuaderno
+                                colorscale=[[0.0, '#0074D9'], [0.5, '#B10DC9'], [1.0, '#FF4136']],
+                                showscale=True,
+                                opacity=0.85,
+                                line=dict(width=0.4, color='white'),
+                                colorbar=dict(
+                                    title="Feature value",
+                                    tickvals=[df_shap_plot['Valor de la Variable (Color)'].min(), df_shap_plot['Valor de la Variable (Color)'].max()],
+                                    ticktext=["Low", "High"],
+                                    len=0.85
+                                )
+                            ),
+                            # Ventana emergente interactiva elegante (Hover)
+                            hovertemplate=(
+                                "<b>Variable:</b> %{customdata[0]}<br>"
+                                "<b>Impacto SHAP:</b> %{x:.4f}<br>"
+                                "<b>Valor Característica:</b> %{marker.color:.4f}<br>"
+                                "<b>Simulación Index:</b> #%{customdata[1]}<extra></extra>"
+                            ),
+                            # Inyectamos datos complementarios para que el Hover los lea sin romper los ejes
+                            customdata=np.stack((df_shap_plot['Variable Técnica'], df_shap_plot['Muestra N°']), axis=-1)
+                        ))
+                        
+                        # 3. AJUSTES DEL LIENZO, EJE CATEGÓRICO Y LÍNEAS DE REJILLA
+                        valores_eje_y = list(range(len(orden_variables_y)))
+                        nombres_eje_y = list(reversed(orden_variables_y)) # Invertimos para que la más importante quede arriba
+                        
+                        fig_shap_live.update_layout(
+                            template='plotly_white',
+                            height=600, # Altura amplia para evitar el amontonamiento de nombres
+                            title='Top 10 Variables Críticas en el Modelo Predictivo (Análisis SHAP Interactivo)',
+                            xaxis_title='SHAP value (impact on model output)',
+                            yaxis_title='',
+                            # Línea negra central de referencia en 0 (indica neutralidad operativa)
+                            xaxis=dict(zeroline=True, zerolinecolor='#333333', zerolinewidth=1.5, showgrid=True),
+                            # Enmascaramos el eje Y para ocultar los números del jitter y mostrar los nombres limpios
+                            yaxis=dict(
+                                tickmode='array',
+                                tickvals=valores_eje_y,
+                                ticktext=nombres_eje_y,
+                                showgrid=True,
+                                gridcolor='#E5E7E9', # Líneas horizontales grises tenues que delimitan cada carril
+                                tickfont=dict(size=12, family="Arial, sans-serif")
+                            ),
+                            hovermode='closest'
+                        )
+                        
+                        # Renderizamos el gráfico interactivo corregido
+                        st.plotly_chart(fig_shap_live, use_container_width=True)
+                        
+                    except Exception as e:
+                        st.error(f"Error al estructurar el gráfico interactivo de SHAP: {e}")
+                        
+                else:
+                    st.warning("⚠️ Archivo 'datos_shap.pkl' no detectado en el directorio de modelos.")
+                    st.info("Asegúrese de montar el archivo pkl exportado desde su cuaderno para inicializar la sección.")
+                # --- GUÍA DE INTERPRETACIÓN EN FORMATO UI MODERNO ---
+                st.markdown("---")
+                st.markdown("### Guía Metodológica de Interpretación")
+                
+                c_guia1, c_guia2, c_guia3 = st.columns(3)
+                
+                with c_guia1:
+                    st.markdown("#### 1. Orden de Importancia")
+                    st.info(
+                        "Las variables en el **eje vertical (Y)** están organizadas de forma estrictamente descendente. "
+                        "El elemento en la cima posee el mayor impacto y sensibilidad sobre el resultado del modelo."
+                    )
+                    
+                with c_guia2:
+                    st.markdown("#### 2. Sentido del Impacto")
+                    st.info(
+                        "El **eje horizontal (X)** mide el valor SHAP:\n"
+                        "* **Puntos a la Derecha (> 0):** Esa variable AUMENTA la predicción **(Ej. mayor cargabilidad)**.\n"
+                        "* **Puntos a la Izquierda (< 0):** Esa variable DISMINUYE la predicción **(Ej. menor cargabilidad)**."
+                    )
+                    
+                with c_guia3:
+                    st.markdown("#### 3. Magnitud Física")
+                    st.info(
+                        "El color de cada punto representa el valor original del dato de entrada:\n"
+                        "* **Color Rojo:** Valor alto de la variable (ej. pico de demanda o año avanzado).\n"
+                        "* **Color Azul:** Valor bajo (ej. valles de carga o alternativa activa).\n"
+                        "* Nota: Cada punto en el gráfico representa una simulación específica evaluada por la IA."
+                    )
 
         except Exception as e:
             st.error(f"Error al renderizar el dashboard: {e}")

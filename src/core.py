@@ -139,3 +139,27 @@ def load_validation_data():
     if os.path.exists(valid_path):
         return joblib.load(valid_path)
     return None
+
+@st.cache_data
+def generar_datos_heatmaps(df_original):
+    """
+    Genera las matrices dinámicas para los mapas de calor comparativos.
+    Usa st.cache_data para evitar recalcular con cada interacción del usuario.
+    """
+    # 1. Crear las tablas dinámicas (Pivot Tables) promediando cargabilidad por Elemento y Año
+    pivot_a0 = df_original.pivot_table(values='Cargabilidad (%)_A0', index='Elemento', columns='Año', aggfunc='mean')
+    pivot_a1 = df_original.pivot_table(values='Cargabilidad (%)_A1', index='Elemento', columns='Año', aggfunc='mean')
+    
+    # 2. Determinar los límites de color globales para que la escala sea simétrica y comparable
+    vmin = float(min(pivot_a0.min().min(), pivot_a1.min().min()))
+    vmax = float(max(pivot_a0.max().max(), pivot_a1.max().max()))
+    
+    return pivot_a0, pivot_a1, vmin, vmax
+
+@st.cache_resource
+def load_shap_data():
+    """Carga los datos precalculados de SHAP para evitar ralentizar la app en vivo"""
+    shap_path = os.path.join(current_path, "models", "datos_shap.pkl")
+    if os.path.exists(shap_path):
+        return joblib.load(shap_path)
+    return None
