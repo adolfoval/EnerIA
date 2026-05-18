@@ -11,7 +11,7 @@ etc/*
 # 2. ARCHIVOS DE DATOS (DATASETS)
 # ==========================================
 
-src/datasets/*.xlsx
+# src/datasets/*.xlsx
 pyvenv.cfg
 __pycache__/
 *.pyc
